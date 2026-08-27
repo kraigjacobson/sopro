@@ -1,5 +1,5 @@
 import { AssetCache, getCachedReference, putCachedReference } from './cache.js';
-import { FINAL_FADE_SECONDS, GATE_HOLD_SECONDS, JOIN_FADE_SECONDS, LEAD_IN_SECONDS, SEGMENT_LEAD_SECONDS, SEGMENT_SKIP_SECONDS, StreamingISTFT, cropAndNormalizeReference, energyOnset, fadeEdges, istft, joinSegments, matchGain, outputGain, referenceFeatures, resample, softLimit, speechOnset, trimLead, trimTrail } from './dsp.js';
+import { FINAL_FADE_SECONDS, GATE_HOLD_SECONDS, JOIN_FADE_SECONDS, LEAD_IN_SECONDS, SEGMENT_LEAD_SECONDS, SEGMENT_SKIP_SECONDS, StreamingISTFT, cropAndNormalizeReference, energyFraction, energyOnset, fadeEdges, istft, joinSegments, matchGain, outputGain, referenceFeatures, resample, softLimit, speechOnset, trimLead, trimTrail } from './dsp.js';
 import { SentencePieceTokenizer, splitText } from './tokenizer.js';
 
 function joinUrl(base, path) { return `${String(base).replace(/\/$/, '')}/${path}`; }
@@ -806,7 +806,12 @@ export class SoproTTS {
       let cut = Math.max(absoluteOnset - Math.floor(lead * this.sampleRate), Math.floor(skip * this.sampleRate));
       cut = Math.min(cut, Math.max(0, absoluteOnset - Math.floor(0.02 * this.sampleRate)));
       const guard = energyOnset(merged, this.sampleRate);
-      if (guard !== null) cut = Math.min(cut, Math.max(Math.floor(skip * this.sampleRate), pendingOffset + guard - Math.floor(0.05 * this.sampleRate)));
+      if (guard !== null && guard < onset) {
+        const near = onset - guard <= Math.floor(0.05 * this.sampleRate);
+        if (near || energyFraction(merged, this.sampleRate, guard, onset) >= 0.35) {
+          cut = Math.min(cut, Math.max(Math.floor(skip * this.sampleRate), pendingOffset + guard - Math.floor(0.05 * this.sampleRate)));
+        }
+      }
       const out = merged.slice(Math.max(0, cut - pendingOffset));
       pending = null;
       return fadeEdges(out, this.sampleRate, !first, false);

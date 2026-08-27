@@ -204,6 +204,19 @@ def energy_onset(wav: torch.Tensor, sample_rate: int, over_floor_db: float = 10.
     return int(hits[0]) * win
 
 
+def energy_fraction(wav: torch.Tensor, sample_rate: int, start: int, end: int, over_floor_db: float = 10.0) -> float:
+    x = wav.detach().float().reshape(-1)
+    win = int(sample_rate * 0.010)
+    if end <= start or int(x.numel()) < win:
+        return 0.0
+    rms = x[: (x.numel() // win) * win].view(-1, win).pow(2).mean(dim=-1).sqrt()
+    floor = float(torch.quantile(rms, 0.1))
+    seg = rms[start // win : max(start // win + 1, end // win)]
+    if int(seg.numel()) == 0:
+        return 0.0
+    return float((seg > floor * 10.0 ** (over_floor_db / 20.0)).float().mean())
+
+
 def trim_lead(wav: torch.Tensor, sample_rate: int, lead: float = LEAD_IN_SECONDS, skip: float = 0.0) -> torch.Tensor:
     onset = speech_onset(wav, sample_rate)
     if onset is None:

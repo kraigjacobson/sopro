@@ -281,6 +281,18 @@ export function energyOnset(wav, sampleRate, overFloorDb = 10, minFrames = 3) {
   return null;
 }
 
+export function energyFraction(wav, sampleRate, start, end, overFloorDb = 10) {
+  const { values, win } = shortRms(wav, sampleRate);
+  if (end <= start || !values.length) return 0;
+  const threshold = quantile(values, 0.1) * 10 ** (overFloorDb / 20);
+  const a = Math.floor(start / win), b = Math.max(a + 1, Math.floor(end / win));
+  const seg = values.slice(a, b);
+  if (!seg.length) return 0;
+  let hits = 0;
+  for (const v of seg) hits += v > threshold ? 1 : 0;
+  return hits / seg.length;
+}
+
 export function trimLead(wav, sampleRate, lead = LEAD_IN_SECONDS, skip = 0) {
   const onset = speechOnset(wav, sampleRate);
   if (onset === null) return wav;
