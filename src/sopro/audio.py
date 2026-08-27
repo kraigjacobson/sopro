@@ -32,6 +32,7 @@ LEAD_IN_SECONDS = 0.08
 SEGMENT_LEAD_SECONDS = 0.30
 SEGMENT_SKIP_SECONDS = 0.10
 TRAIL_SECONDS = 0.30
+GATE_HOLD_SECONDS = 2.0
 JOIN_FADE_SECONDS = 0.01
 
 
@@ -185,6 +186,19 @@ def speech_onset(wav: torch.Tensor, sample_rate: int) -> Optional[int]:
     if int(hits.numel()) == 0:
         return None
     return int(hits[0]) * win
+
+
+def energy_onset(wav: torch.Tensor, sample_rate: int, over_floor_db: float = 6.0) -> Optional[int]:
+    x = wav.detach().float().reshape(-1)
+    win = int(sample_rate * 0.010)
+    if int(x.numel()) < win * 3:
+        return None
+    rms = x[: (x.numel() // win) * win].view(-1, win).pow(2).mean(dim=-1).sqrt()
+    floor = float(torch.quantile(rms, 0.1))
+    above = (rms > floor * 10.0 ** (over_floor_db / 20.0)).nonzero()
+    if int(above.numel()) == 0:
+        return None
+    return int(above[0]) * win
 
 
 def trim_lead(wav: torch.Tensor, sample_rate: int, lead: float = LEAD_IN_SECONDS, skip: float = 0.0) -> torch.Tensor:

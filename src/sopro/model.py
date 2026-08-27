@@ -311,7 +311,7 @@ class SoproTTS:
             pending = torch.cat([pending, audio], dim=-1)
             onset = audio_ops.speech_onset(pending, self.sample_rate)
             if onset is None:
-                keep = int(lead * self.sample_rate)
+                keep = int(max(float(lead), audio_ops.GATE_HOLD_SECONDS) * self.sample_rate)
                 if int(pending.shape[-1]) > keep:
                     pending_offset += int(pending.shape[-1]) - keep
                     pending = pending[-keep:]
@@ -319,6 +319,9 @@ class SoproTTS:
             abs_onset = pending_offset + onset
             cut = max(abs_onset - int(lead * self.sample_rate), int(skip * self.sample_rate))
             cut = min(cut, max(0, abs_onset - int(0.02 * self.sample_rate)))
+            guard = audio_ops.energy_onset(pending, self.sample_rate)
+            if guard is not None:
+                cut = min(cut, max(int(skip * self.sample_rate), pending_offset + guard - int(0.05 * self.sample_rate)))
             out = pending[max(0, cut - pending_offset) :]
             pending = None
             return audio_ops.fade_edges(out, self.sample_rate, fade_in=not first, fade_out=False)
