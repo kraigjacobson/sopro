@@ -197,7 +197,8 @@ def energy_onset(wav: torch.Tensor, sample_rate: int, over_floor_db: float = 10.
     if int(rms.numel()) < min_frames:
         return None
     floor = float(torch.quantile(rms, 0.1))
-    above = (rms > floor * 10.0 ** (over_floor_db / 20.0)).float()
+    thr = max(floor * 10.0 ** (over_floor_db / 20.0), 10.0 ** (ONSET_THRESHOLD_DB / 20.0))
+    above = (rms > thr).float()
     hits = (above.unfold(0, min_frames, 1).sum(dim=-1) >= min_frames).nonzero()
     if int(hits.numel()) == 0:
         return None
@@ -211,10 +212,11 @@ def energy_fraction(wav: torch.Tensor, sample_rate: int, start: int, end: int, o
         return 0.0
     rms = x[: (x.numel() // win) * win].view(-1, win).pow(2).mean(dim=-1).sqrt()
     floor = float(torch.quantile(rms, 0.1))
+    thr = max(floor * 10.0 ** (over_floor_db / 20.0), 10.0 ** (ONSET_THRESHOLD_DB / 20.0))
     seg = rms[start // win : max(start // win + 1, end // win)]
     if int(seg.numel()) == 0:
         return 0.0
-    return float((seg > floor * 10.0 ** (over_floor_db / 20.0)).float().mean())
+    return float((seg > thr).float().mean())
 
 
 def trim_lead(wav: torch.Tensor, sample_rate: int, lead: float = LEAD_IN_SECONDS, skip: float = 0.0) -> torch.Tensor:

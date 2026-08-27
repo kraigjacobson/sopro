@@ -272,7 +272,7 @@ export function speechOnset(wav, sampleRate) {
 export function energyOnset(wav, sampleRate, overFloorDb = 10, minFrames = 3) {
   const { values, win } = shortRms(wav, sampleRate);
   if (values.length < minFrames) return null;
-  const threshold = quantile(values, 0.1) * 10 ** (overFloorDb / 20);
+  const threshold = Math.max(quantile(values, 0.1) * 10 ** (overFloorDb / 20), 10 ** (ONSET_THRESHOLD_DB / 20));
   let run = 0;
   for (let t = 0; t < values.length; t++) {
     run = values[t] > threshold ? run + 1 : 0;
@@ -284,7 +284,7 @@ export function energyOnset(wav, sampleRate, overFloorDb = 10, minFrames = 3) {
 export function energyFraction(wav, sampleRate, start, end, overFloorDb = 10) {
   const { values, win } = shortRms(wav, sampleRate);
   if (end <= start || !values.length) return 0;
-  const threshold = quantile(values, 0.1) * 10 ** (overFloorDb / 20);
+  const threshold = Math.max(quantile(values, 0.1) * 10 ** (overFloorDb / 20), 10 ** (ONSET_THRESHOLD_DB / 20));
   const a = Math.floor(start / win), b = Math.max(a + 1, Math.floor(end / win));
   const seg = values.slice(a, b);
   if (!seg.length) return 0;
