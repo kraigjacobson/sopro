@@ -54,7 +54,8 @@ function preparePlayback() {
   if (playbackContext && playbackContext.state !== 'closed') return playbackReady;
   const Context = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!Context) throw new Error('Web Audio is unavailable in this browser.');
-  playbackContext = new Context();
+  try { playbackContext = new Context(tts?.sampleRate ? { sampleRate: tts.sampleRate } : undefined); }
+  catch { playbackContext = new Context(); }
   if (!playbackContext.audioWorklet || !globalThis.AudioWorkletNode) throw new Error('Streaming audio is unavailable in this browser.');
   playbackDestination = playbackContext.createMediaStreamDestination(); streamAudio.srcObject = playbackDestination.stream;
   playbackReady = playbackContext.audioWorklet.addModule(new URL('./output-worklet.js', import.meta.url)).then(() => preparePlaybackNode());
@@ -263,6 +264,21 @@ textInput.addEventListener('input', () => { defaultTextActive = false; });
 language.addEventListener('change', () => { if (defaultTextActive) textInput.value = DEFAULT_TEXT[language.value] ?? DEFAULT_TEXT['']; });
 backend.addEventListener('change', () => { if (!runtimeUi.selector) return; try { localStorage.setItem(runtimeUi.selector.storageKey, backend.value); } catch {} location.reload(); });
 
+function armPlayback(node) {
+  return new Promise((resolve) => {
+    const started = streamAudio.currentTime;
+    let ticks = 0;
+    const finish = () => {
+      clearInterval(poll); clearTimeout(timer);
+      node.port.postMessage({ type: 'go' }); resolve();
+    };
+    const poll = setInterval(() => {
+      if (streamAudio.currentTime > started && ++ticks >= 2) finish();
+    }, 25);
+    const timer = setTimeout(finish, 1500);
+  });
+}
+
 class StreamResampler {
   constructor(sourceRate, targetRate) { this.ratio = sourceRate / targetRate; this.phase = 0; this.previous = null; }
 
@@ -288,7 +304,7 @@ class StreamPlayer {
     if (!playbackContext || !playbackReady || !playbackNode) throw new Error('Audio playback is not ready.');
     this.context = playbackContext; this.node = playbackNode; playbackNode = null;
     this.sampleRate = sampleRate; this.resampler = new StreamResampler(sampleRate, this.context.sampleRate); this.startTime = null;
-    this.previousChunkAt = null; this.productionRtf = null; this.generatedSeconds = 0;
+    this.previousChunkAt = null; this.productionRtf = null; this.generatedSeconds = 0; this.chunkCount = 0;
     this.started = false; this.buffering = false; this.suspendedForBuffer = false; this.ended = false; this.aborted = false;
     this.onStart = onStart; this.onBuffer = onBuffer; this.onEnd = onEnd;
     const activated = activatePlayback();
@@ -298,6 +314,7 @@ class StreamPlayer {
         if (data.type === 'start' && this.startTime === null) { this.startTime = data.at; this.onStart?.(); }
         else if (data.type === 'end') this._finish();
       };
+      return armPlayback(this.node);
     });
   }
 
@@ -313,14 +330,14 @@ class StreamPlayer {
 
   async push(samples) {
     const now = performance.now(), audioSeconds = samples.length / this.sampleRate;
-    this.generatedSeconds += audioSeconds;
-    if (this.previousChunkAt !== null) {
+    this.generatedSeconds += audioSeconds; this.chunkCount++;
+    if (this.previousChunkAt !== null && this.chunkCount > 2) {
       const observedRtf = ((now - this.previousChunkAt) / 1000) / Math.max(audioSeconds, 1e-6);
       this.productionRtf = this.productionRtf === null ? observedRtf : this.productionRtf * .65 + observedRtf * .35;
     }
     this.previousChunkAt = now; await this.ready;
     if (this.aborted) return;
-    if (this.started && this.productionRtf > 1) this._beginBuffering();
+    if (this.started && this.productionRtf !== null && this.productionRtf > 1 && this.generatedSeconds - this.currentTime < .25) this._beginBuffering();
     if (this.buffering && !this.suspendedForBuffer) { await this.context.suspend(); this.suspendedForBuffer = true; }
     const output = this.resampler.push(samples);
     if (output.length) this.node.port.postMessage({ type: 'chunk', samples: output }, [output.buffer]);

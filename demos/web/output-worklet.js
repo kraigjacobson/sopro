@@ -2,10 +2,12 @@ class SoproOutputProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.queue = []; this.offset = 0; this.queued = 0; this.started = false; this.ending = false; this.finished = false;
-    this.speechGain = 0; this.lastSample = 0;
+    this.speechGain = 0; this.lastSample = 0; this.armed = false; this.waited = 0;
+    this.prime = Math.round(sampleRate * .35); this.primeCap = Math.round(sampleRate * .8);
     this.port.onmessage = ({ data }) => {
       if (data.type === 'chunk') { this.queue.push(data.samples); this.queued += data.samples.length; }
       else if (data.type === 'end') this.ending = true;
+      else if (data.type === 'go') this.armed = true;
     };
   }
 
@@ -20,6 +22,13 @@ class SoproOutputProcessor extends AudioWorkletProcessor {
   process(inputs, outputs) {
     const output = outputs[0]?.[0];
     if (!output) return true;
+    if (!this.armed) return true;
+    if (!this.started && this.queued) {
+      if (this.queued < this.prime && !this.ending && this.waited < this.primeCap) {
+        this.waited += output.length;
+        return true;
+      }
+    }
     const fadeFrames = Math.max(1, sampleRate * .005), fadeStep = 1 / fadeFrames;
     for (let index = 0; index < output.length; index++) {
       const value = this.next();
