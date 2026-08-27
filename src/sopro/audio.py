@@ -188,17 +188,20 @@ def speech_onset(wav: torch.Tensor, sample_rate: int) -> Optional[int]:
     return int(hits[0]) * win
 
 
-def energy_onset(wav: torch.Tensor, sample_rate: int, over_floor_db: float = 6.0) -> Optional[int]:
+def energy_onset(wav: torch.Tensor, sample_rate: int, over_floor_db: float = 10.0, min_frames: int = 3) -> Optional[int]:
     x = wav.detach().float().reshape(-1)
     win = int(sample_rate * 0.010)
-    if int(x.numel()) < win * 3:
+    if int(x.numel()) < win * min_frames:
         return None
     rms = x[: (x.numel() // win) * win].view(-1, win).pow(2).mean(dim=-1).sqrt()
-    floor = float(torch.quantile(rms, 0.1))
-    above = (rms > floor * 10.0 ** (over_floor_db / 20.0)).nonzero()
-    if int(above.numel()) == 0:
+    if int(rms.numel()) < min_frames:
         return None
-    return int(above[0]) * win
+    floor = float(torch.quantile(rms, 0.1))
+    above = (rms > floor * 10.0 ** (over_floor_db / 20.0)).float()
+    hits = (above.unfold(0, min_frames, 1).sum(dim=-1) >= min_frames).nonzero()
+    if int(hits.numel()) == 0:
+        return None
+    return int(hits[0]) * win
 
 
 def trim_lead(wav: torch.Tensor, sample_rate: int, lead: float = LEAD_IN_SECONDS, skip: float = 0.0) -> torch.Tensor:

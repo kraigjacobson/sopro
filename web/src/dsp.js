@@ -269,12 +269,15 @@ export function speechOnset(wav, sampleRate) {
   return null;
 }
 
-export function energyOnset(wav, sampleRate, overFloorDb = 6) {
+export function energyOnset(wav, sampleRate, overFloorDb = 10, minFrames = 3) {
   const { values, win } = shortRms(wav, sampleRate);
-  if (values.length < 3) return null;
-  const floor = quantile(values, 0.1);
-  const threshold = floor * 10 ** (overFloorDb / 20);
-  for (let t = 0; t < values.length; t++) if (values[t] > threshold) return t * win;
+  if (values.length < minFrames) return null;
+  const threshold = quantile(values, 0.1) * 10 ** (overFloorDb / 20);
+  let run = 0;
+  for (let t = 0; t < values.length; t++) {
+    run = values[t] > threshold ? run + 1 : 0;
+    if (run >= minFrames) return (t - minFrames + 1) * win;
+  }
   return null;
 }
 
