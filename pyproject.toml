@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sopro"
+version = "2.0.0"
+description = "Fast streaming text-to-speech with zero-shot voice cloning."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Samuel Vitorino", email = "samvitorino@gmail.com" }]
+dependencies = [
+  "torch>=2.3",
+  "torchaudio>=2.3",
+  "numpy>=1.24",
+  "safetensors>=0.4.3",
+  "sentencepiece>=0.2.0",
+  "soundfile>=0.12.1",
+  "huggingface_hub>=0.23",
+]
+
+[project.urls]
+Homepage = "https://github.com/samuel-vitorino/sopro"
+Repository = "https://github.com/samuel-vitorino/sopro"
+
+[project.scripts]
+soprotts = "sopro.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sopro"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"demos/web/index.html" = "sopro/demo/index.html"
+"demos/web/main.js" = "sopro/demo/main.js"
+"demos/web/output-worklet.js" = "sopro/demo/output-worklet.js"
+"demos/web/style.css" = "sopro/demo/style.css"
+"demos/web/backend-python.js" = "sopro/demo/backend-python.js"
+"demos/web/coi.js" = "sopro/demo/coi.js"
+"demos/web/sw.js" = "sopro/demo/sw.js"
+"demos/web/assets" = "sopro/demo/assets"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/demos/web", "/assets", "/README.md", "/LICENSE.txt"]
+exclude = ["**/__pycache__", "**/.DS_Store"]

@@ -1,0 +1,49 @@
+<svg viewBox="0 0 1200 230" width="1200" height="230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sopro V2">
+  <style>
+    .phrase {
+      font-family: Georgia, "Times New Roman", serif;
+      font-style: italic;
+      font-size: 46px;
+      fill: #f2f2ef;
+      opacity: 0;
+      animation: cycle 10s linear infinite;
+    }
+    .final {
+      font-style: normal;
+      font-size: 52px;
+      letter-spacing: -1px;
+      animation-name: cycle-final;
+      animation-delay: 6.8s;
+    }
+    @keyframes cycle {
+      0% { opacity: 0; transform: translateY(10px); }
+      4% { opacity: 1; transform: translateY(0); }
+      14% { opacity: 1; transform: translateY(0); }
+      17% { opacity: 0; transform: translateY(-10px); }
+      100% { opacity: 0; transform: translateY(-10px); }
+    }
+    @keyframes cycle-final {
+      0% { opacity: 0; transform: translateY(10px); }
+      4% { opacity: 1; transform: translateY(0); }
+      29% { opacity: 1; transform: translateY(0); }
+      32% { opacity: 0; transform: translateY(-10px); }
+      100% { opacity: 0; transform: translateY(-10px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .phrase { animation: none; }
+      .final { opacity: 1; }
+    }
+  </style>
+  <defs>
+    <pattern id="grid" width="46" height="46" patternUnits="userSpaceOnUse">
+      <path d="M46 0H0V46" fill="none" stroke="rgba(242, 242, 239, 0.05)" stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="1200" height="230" fill="#11110f" />
+  <rect width="1200" height="230" fill="url(#grid)" />
+  <text class="phrase" x="600" y="131" text-anchor="middle" style="animation-delay: 0s">Olá, mundo</text>
+  <text class="phrase" x="600" y="131" text-anchor="middle" style="animation-delay: 1.7s">Hello, world</text>
+  <text class="phrase" x="600" y="131" text-anchor="middle" style="animation-delay: 3.4s">Bonjour, le monde</text>
+  <text class="phrase" x="600" y="131" text-anchor="middle" style="animation-delay: 5.1s">Hallo, Welt</text>
+  <text class="phrase final" x="600" y="133" text-anchor="middle">Sopro V2</text>
+</svg>

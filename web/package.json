@@ -1,0 +1,35 @@
+{
+  "name": "@soprotts/onnx-web",
+  "version": "0.1.0",
+  "description": "Local Sopro TTS with desktop WebGPU and mobile WASM/SIMD runtimes.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node --check src/index.js"
+  },
+  "dependencies": {
+    "onnxruntime-web": "^1.29.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samuel-vitorino/sopro.git",
+    "directory": "web"
+  },
+  "homepage": "https://github.com/samuel-vitorino/sopro",
+  "keywords": [
+    "tts",
+    "text-to-speech",
+    "onnx",
+    "webgpu",
+    "wasm",
+    "voice-cloning"
+  ]
+}

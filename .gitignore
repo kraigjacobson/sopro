@@ -1,0 +1,9 @@
+artifacts/
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+dist/
+*.wav

@@ -1,0 +1,5 @@
+# Export-only dependencies. These are deliberately not Python package dependencies.
+onnx>=1.19,<1.23
+onnxruntime>=1.23,<1.29
+onnxscript>=0.5,<0.7
+onnxconverter-common>=1.16,<2
