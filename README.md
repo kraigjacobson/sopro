@@ -73,7 +73,7 @@ Add `--stream` for the streaming path. You have the expected `--temperature`, `-
 
 - `--lang` (`en`, `pt`, `fr`, `de`; optional, helps pronunciation on ambiguous text)
 - `--int8` (int8 AR weights on CPU)
-- `--steps` (acoustic solver steps; default 2)
+- `--steps` (acoustic solver steps; default 2). If you want to trade speed for quality, 8, 16, or even 32 steps can give higher quality speech on more challenging references
 - `--max-seconds` (cap per generated segment; long text is split into segments, so total length is unbounded)
 
 ### Python
