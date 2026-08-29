@@ -1,0 +1,101 @@
+name: Build and push sopro image
+
+# Builds the sopro image on a GitHub-hosted runner and pushes it so RunPod can
+# pull it. Trigger manually from the Actions tab (workflow_dispatch) or by
+# pushing a v* tag.
+#
+# Registries:
+#   - ghcr.io/<owner>/sopro       always — uses the workflow's own GITHUB_TOKEN,
+#                                 no secrets to configure.
+#   - docker.io/krjacobson1/sopro only when DOCKERHUB_USERNAME + DOCKERHUB_TOKEN
+#                                 secrets are set (same secrets the cosy2 repo uses).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
+  push:
+    tags:
+      - "v*"
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/sopro
+  DOCKERHUB_IMAGE: krjacobson1/sopro
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The pytorch/cuda base is ~8 GB; reclaim runner disk before pulling it.
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+
+      - name: Determine version tag
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub (optional)
+        if: env.DH_USER != '' && env.DH_TOKEN != ''
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          tags="${GHCR_IMAGE}:${v},${GHCR_IMAGE}:latest"
+          if [ -n "$DH_USER" ] && [ -n "$DH_TOKEN" ]; then
+            tags="${tags},${DOCKERHUB_IMAGE}:${v},${DOCKERHUB_IMAGE}:latest"
+          fi
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # provenance:false keeps it a single plain image manifest (no
+          # attestation manifest list) so RunPod/podman pull it cleanly.
+          provenance: false
+          tags: ${{ steps.tags.outputs.tags }}

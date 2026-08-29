@@ -1,0 +1,36 @@
+# sopro-v2-turbo zero-shot TTS — single self-contained service, cosy2-compatible API
+# on host port 50010. 120M params: ~1 GB VRAM on the GPU, or CPU if there isn't one.
+#
+# Up:        podman compose up -d
+# Rebuild:   podman compose build sopro
+# Try it:    curl -X POST http://127.0.0.1:50010/inference_zero_shot \
+#              -F 'tts_text=hello from sopro' -F 'prompt_wav=@reference.wav' -o out.pcm
+#            aplay -f S16_LE -c 1 -r 24000 out.pcm
+#
+# Target: Bazzite + rootless podman. GPU uses CDI device syntax (nvidia.com/gpu=all).
+
+services:
+  sopro:
+    restart: unless-stopped
+    devices:
+      - nvidia.com/gpu=all
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Built locally (`podman compose build sopro`) or pulled from the registry the
+    # GitHub workflow pushes to (.github/workflows/docker-build-push.yml).
+    image: ${SOPRO_IMAGE:-ghcr.io/kraigjacobson/sopro:v0.1.0}
+    container_name: sopro
+    ports:
+      - "${SOPRO_PORT:-50010}:50010"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # auto = cuda when a GPU is visible, else cpu.
+      SOPRO_DEVICE: "${SOPRO_DEVICE:-auto}"
+      # Acoustic solver steps. 2 is the model default (fast); 8-32 trades speed
+      # for quality on hard references.
+      SOPRO_STEPS: "${SOPRO_STEPS:-2}"
+      # Language hint for every request (en|pt|fr|de). Empty = model decides.
+      SOPRO_LANG: "${SOPRO_LANG:-}"
+      # Privacy: don't echo the spoken text into the logs. 1 to log it for debug.
+      SOPRO_LOG_PROMPTS: "${SOPRO_LOG_PROMPTS:-0}"

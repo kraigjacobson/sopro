@@ -4,6 +4,10 @@
 
 # Sopro TTS
 
+> **Fork note (kraigjacobson/sopro):** this checkout adds a cosy2-compatible HTTP server, a RunPod
+> serverless handler, a Dockerfile/compose and a build workflow so sopro can be a drop-in voice for
+> the aitts stack. See [`DEPLOY.md`](DEPLOY.md). Everything below is upstream's README.
+
 [![Blog](https://img.shields.io/badge/Blog-Sopro%20V2-11110f?logo=rss&logoColor=white)](https://research.haloneuro.ai/posts/sopro-v2)
 [![HuggingFace](https://img.shields.io/badge/HuggingFace-Model-orange?logo=huggingface)](https://huggingface.co/samuel-vitorino/sopro-v2-turbo)
 [![ONNX Demo](https://img.shields.io/badge/Demo-In--browser-005ced?logo=onnx&logoColor=white)](https://samuel-vitorino.github.io/sopro/)

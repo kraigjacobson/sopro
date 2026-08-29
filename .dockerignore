@@ -1,0 +1,20 @@
+# Only what the Dockerfile COPYs (pyproject/README/LICENSE, src/, demos/web,
+# server.py, rp_handler.py) belongs in the build context.
+.git
+.github
+.claude
+web/
+assets/
+uv.lock
+docker-compose.yml
+.env
+.env.*
+DEPLOY.md
+__pycache__/
+*.pyc
+*.wav
+*.pcm
+artifacts/
+pretrained_models/
+dist/
+.venv/
