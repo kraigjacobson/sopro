@@ -26,6 +26,14 @@ RUN python -c "import torch, torchaudio; \
     open('/constraints.txt','w').write(f'torch=={torch.__version__}\ntorchaudio=={torchaudio.__version__}\n')" \
     && cat /constraints.txt
 
+# Bake the model into the HF cache FIRST — before any source file is copied — so the
+# ~760 MB download layer survives every code/README edit instead of being re-pulled.
+ARG SOPRO_MODEL=samuel-vitorino/sopro-v2-turbo
+ENV SOPRO_MODEL=${SOPRO_MODEL}
+RUN pip install 'huggingface_hub>=0.23' hf_transfer && \
+    python -c "from huggingface_hub import snapshot_download; \
+      print(snapshot_download('${SOPRO_MODEL}', allow_patterns=['config.json', '*.safetensors', 'tokenizer.model']))"
+
 # The sopro package (pyproject force-includes demos/web into the wheel, so it must
 # be in the build context). Serving deps: FastAPI + multipart for the HTTP path,
 # runpod for serverless.
@@ -35,11 +43,6 @@ COPY demos/web ./demos/web
 RUN pip install --constraint /constraints.txt . \
     && pip install --constraint /constraints.txt \
         'fastapi>=0.110' 'uvicorn[standard]>=0.29' python-multipart runpod
-
-# Bake the model into the HF cache so startup is fully offline.
-ARG SOPRO_MODEL=samuel-vitorino/sopro-v2-turbo
-ENV SOPRO_MODEL=${SOPRO_MODEL}
-RUN python -c "from sopro.hub import resolve_artifacts; print(resolve_artifacts('${SOPRO_MODEL}'))"
 ENV HF_HUB_OFFLINE=1
 
 COPY server.py rp_handler.py ./

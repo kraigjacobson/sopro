@@ -73,6 +73,23 @@ DEVICE_PREF = os.environ.get("SOPRO_DEVICE", "auto")
 INT8 = os.environ.get("SOPRO_INT8", "0") in ("1", "true", "True")
 DEFAULT_STEPS = int(os.environ["SOPRO_STEPS"]) if os.environ.get("SOPRO_STEPS") else None
 DEFAULT_LANG = os.environ.get("SOPRO_LANG") or None
+
+
+def _env_num(name: str, cast):
+    v = os.environ.get(name)
+    return cast(v) if v not in (None, "") else None
+
+
+# Server-wide defaults for the other generation levers (a request can still override
+# each one). Empty = the model's own config (temperature 0.8, top_p 0.9, top_k 25,
+# ref_seconds 10, prompt_tokens 120, style_tokens 160). Set these in compose / the
+# RunPod template once a sweep (tools/sweep.py) has found the values you like.
+DEFAULT_TEMPERATURE = _env_num("SOPRO_TEMPERATURE", float)
+DEFAULT_TOP_P = _env_num("SOPRO_TOP_P", float)
+DEFAULT_TOP_K = _env_num("SOPRO_TOP_K", int)
+DEFAULT_REF_SECONDS = _env_num("SOPRO_REF_SECONDS", float)
+DEFAULT_PROMPT_TOKENS = _env_num("SOPRO_PROMPT_TOKENS", int)
+DEFAULT_STYLE_TOKENS = _env_num("SOPRO_STYLE_TOKENS", int)
 REF_CACHE_SIZE = int(os.environ.get("SOPRO_REF_CACHE", "16"))
 LOG_PROMPTS = os.environ.get("SOPRO_LOG_PROMPTS", "0") in ("1", "true", "True")
 
@@ -116,9 +133,14 @@ def decode_audio(data: bytes) -> "tuple[torch.Tensor, int]":
     return torch.from_numpy(np.ascontiguousarray(arr.T)), int(sr)
 
 
-def prepare_reference(data: bytes) -> Reference:
-    """Prepared-reference LRU keyed by the clip's bytes."""
-    key = hashlib.sha256(data).hexdigest()
+def prepare_reference(data: bytes, ref_seconds: Optional[float] = None) -> Reference:
+    """Prepared-reference LRU keyed by the clip's bytes (+ the crop length).
+
+    ref_seconds: how much of the clip to keep (sopro crops on a pause; model default
+    10 s). More seconds = more of the speaker's style in the prompt, slower prefill."""
+    if ref_seconds is None:
+        ref_seconds = DEFAULT_REF_SECONDS
+    key = hashlib.sha256(data + f"|{ref_seconds}".encode()).hexdigest()
     with _ref_lock:
         ref = _refs.get(key)
         if ref is not None:
@@ -127,7 +149,7 @@ def prepare_reference(data: bytes) -> Reference:
     wav, sr = decode_audio(data)
     model = load_model()
     with _gen_lock:
-        ref = model.prepare_reference(ref_audio=wav, sample_rate=sr)
+        ref = model.prepare_reference(ref_audio=wav, sample_rate=sr, seconds=ref_seconds)
     with _ref_lock:
         _refs[key] = ref
         while len(_refs) > REF_CACHE_SIZE:
@@ -144,25 +166,51 @@ def synth_pcm(
     top_p: Optional[float] = None,
     top_k: Optional[int] = None,
     seed: Optional[int] = None,
+    prompt_tokens: Optional[int] = None,
+    style_tokens: Optional[int] = None,
 ) -> bytes:
-    """Synthesize -> raw int16 mono PCM at the model's sample rate (24 kHz)."""
+    """Synthesize -> raw int16 mono PCM at the model's sample rate (24 kHz).
+
+    prompt_tokens / style_tokens override the model's generation config for THIS call
+    (how many of the reference's semantic tokens seed the continuation / the style
+    prefix; defaults 120 / 160). They live on the shared config, so the override is
+    applied and restored under the generation lock."""
     text = " ".join(str(text).split())
     if not text:
         raise HTTPException(400, "tts_text is required")
     model = load_model()
+    if temperature is None:
+        temperature = DEFAULT_TEMPERATURE
+    if top_p is None:
+        top_p = DEFAULT_TOP_P
+    if top_k is None:
+        top_k = DEFAULT_TOP_K
+    if prompt_tokens is None:
+        prompt_tokens = DEFAULT_PROMPT_TOKENS
+    if style_tokens is None:
+        style_tokens = DEFAULT_STYLE_TOKENS
     t0 = time.perf_counter()
     with _gen_lock:
         if seed is not None:
             torch.manual_seed(int(seed))
-        wav = model.synthesize(
-            text,
-            ref=ref,
-            lang=lang or DEFAULT_LANG,
-            steps=steps if steps is not None else DEFAULT_STEPS,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-        )
+        gen = model.generation
+        saved = (gen.prompt_tokens, gen.style_tokens)
+        try:
+            if prompt_tokens is not None:
+                gen.prompt_tokens = int(prompt_tokens)
+            if style_tokens is not None:
+                gen.style_tokens = int(style_tokens)
+            wav = model.synthesize(
+                text,
+                ref=ref,
+                lang=lang or DEFAULT_LANG,
+                steps=steps if steps is not None else DEFAULT_STEPS,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+            )
+        finally:
+            gen.prompt_tokens, gen.style_tokens = saved
     wav = wav.detach().float().cpu().reshape(-1).clamp(-1.0, 1.0)
     pcm = (wav.numpy() * 32767.0).astype("<i2").tobytes()
     dur = len(pcm) / 2 / model.sample_rate
@@ -208,13 +256,22 @@ app = FastAPI(title="sopro", version="2.0", description=__doc__)
 @app.get("/health")
 def health() -> Dict[str, Any]:
     model = load_model()
+    gen = model.generation
     return {
         "status": "ok",
         "model": MODEL_ID,
         "device": DEVICE,
         "sample_rate": model.sample_rate,
-        "steps": DEFAULT_STEPS if DEFAULT_STEPS is not None else int(model.generation.steps),
         "refs_cached": len(_refs),
+        # effective server defaults (env override, else the model's config)
+        "steps": DEFAULT_STEPS if DEFAULT_STEPS is not None else int(gen.steps),
+        "temperature": DEFAULT_TEMPERATURE if DEFAULT_TEMPERATURE is not None else float(gen.temperature),
+        "top_p": DEFAULT_TOP_P if DEFAULT_TOP_P is not None else float(gen.top_p),
+        "top_k": DEFAULT_TOP_K if DEFAULT_TOP_K is not None else int(gen.top_k),
+        "ref_seconds": DEFAULT_REF_SECONDS if DEFAULT_REF_SECONDS is not None else float(gen.ref_seconds),
+        "prompt_tokens": DEFAULT_PROMPT_TOKENS if DEFAULT_PROMPT_TOKENS is not None else int(gen.prompt_tokens),
+        "style_tokens": DEFAULT_STYLE_TOKENS if DEFAULT_STYLE_TOKENS is not None else int(gen.style_tokens),
+        "lang": DEFAULT_LANG,
     }
 
 
@@ -236,6 +293,9 @@ async def inference_zero_shot(
     top_p: Optional[str] = Form(None),
     top_k: Optional[str] = Form(None),
     seed: Optional[str] = Form(None),
+    ref_seconds: Optional[str] = Form(None),
+    prompt_tokens: Optional[str] = Form(None),
+    style_tokens: Optional[str] = Form(None),
     prompt_text: Optional[str] = Form(None),   # cosy2 compat; sopro needs no transcript
     stream: Optional[str] = Form(None),        # cosy2 compat; always one-shot here
 ):
@@ -244,11 +304,12 @@ async def inference_zero_shot(
         raise HTTPException(400, "prompt_wav is empty")
 
     def work() -> bytes:
-        ref = prepare_reference(data)
+        ref = prepare_reference(data, _opt_float(ref_seconds))
         return synth_pcm(
             tts_text, ref, lang=lang or None, steps=_opt_int(steps),
             temperature=_opt_float(temperature), top_p=_opt_float(top_p),
             top_k=_opt_int(top_k), seed=_opt_int(seed),
+            prompt_tokens=_opt_int(prompt_tokens), style_tokens=_opt_int(style_tokens),
         )
 
     pcm = await run_in_threadpool(work)
@@ -269,6 +330,9 @@ class SynthRequest(BaseModel):
     top_p: Optional[float] = None
     top_k: Optional[int] = None
     seed: Optional[int] = None
+    ref_seconds: Optional[float] = None
+    prompt_tokens: Optional[int] = None
+    style_tokens: Optional[int] = None
 
 
 def synthesize_job(body: Dict[str, Any]) -> Dict[str, Any]:
@@ -284,11 +348,12 @@ def synthesize_job(body: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         return {"error": f"speaker_audio_base64 is not valid base64: {e}"}
     try:
-        ref = prepare_reference(data)
+        ref = prepare_reference(data, body.get("ref_seconds"))
         pcm = synth_pcm(
             text, ref, lang=body.get("lang") or None, steps=body.get("steps"),
             temperature=body.get("temperature"), top_p=body.get("top_p"),
             top_k=body.get("top_k"), seed=body.get("seed"),
+            prompt_tokens=body.get("prompt_tokens"), style_tokens=body.get("style_tokens"),
         )
     except HTTPException as e:
         return {"error": str(e.detail)}

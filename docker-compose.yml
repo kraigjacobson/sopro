@@ -32,5 +32,13 @@ services:
       SOPRO_STEPS: "${SOPRO_STEPS:-2}"
       # Language hint for every request (en|pt|fr|de). Empty = model decides.
       SOPRO_LANG: "${SOPRO_LANG:-}"
+      # The other generation levers. Empty = the model's own defaults (0.8 / 0.9 / 25 /
+      # 10 s / 120 / 160). Run tools/sweep.py, pick by ear, pin the winners here.
+      SOPRO_TEMPERATURE: "${SOPRO_TEMPERATURE:-}"
+      SOPRO_TOP_P: "${SOPRO_TOP_P:-}"
+      SOPRO_TOP_K: "${SOPRO_TOP_K:-}"
+      SOPRO_REF_SECONDS: "${SOPRO_REF_SECONDS:-}"
+      SOPRO_PROMPT_TOKENS: "${SOPRO_PROMPT_TOKENS:-}"
+      SOPRO_STYLE_TOKENS: "${SOPRO_STYLE_TOKENS:-}"
       # Privacy: don't echo the spoken text into the logs. 1 to log it for debug.
       SOPRO_LOG_PROMPTS: "${SOPRO_LOG_PROMPTS:-0}"

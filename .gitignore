@@ -8,3 +8,6 @@ __pycache__/
 dist/
 *.wav
 pretrained_models/
+
+# parameter-sweep output (audio + html gallery)
+sweeps/
